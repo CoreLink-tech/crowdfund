@@ -51,7 +51,7 @@ export function Header() {
               >
                 Start a fundraiser <ArrowUpRight size={15} />
               </Link>
-              <UserButton afterSignOutUrl="/" />
+              <UserButton />
             </Show>
           </Suspense>
         </div>
