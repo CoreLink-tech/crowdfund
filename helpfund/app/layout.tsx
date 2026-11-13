@@ -6,21 +6,22 @@ import { Footer } from "@/components/footer";
 
 export const metadata: Metadata = {
   title: "HelpFund — People helping people",
-  description: "Create a fundraiser, support a cause and make a difference with HelpFund.",
+  description:
+    "Create a fundraiser, support a cause and make a difference with HelpFund.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>
+    <html lang="en">
+      <body>
+        <ClerkProvider>
           <Header />
           <main>{children}</main>
           <Footer />
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }

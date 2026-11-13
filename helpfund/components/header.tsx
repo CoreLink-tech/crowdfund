@@ -2,8 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowUpRight, Heart, Menu } from "lucide-react";
 import {
-  SignedIn,
-  SignedOut,
+  Show,
   SignInButton,
   SignUpButton,
   UserButton,
@@ -30,7 +29,7 @@ export function Header() {
 
         <div className="header-actions">
           <Suspense fallback={<div style={{ width: 120 }} />}>
-            <SignedOut>
+            <Show when="signed-out">
               <SignInButton mode="modal">
                 <button className="header-signin" type="button">
                   Log in
@@ -41,8 +40,8 @@ export function Header() {
                   Start a fundraiser <ArrowUpRight size={15} />
                 </button>
               </SignUpButton>
-            </SignedOut>
-            <SignedIn>
+            </Show>
+            <Show when="signed-in">
               <Link href="/dashboard" className="header-signin">
                 Dashboard
               </Link>
@@ -53,7 +52,7 @@ export function Header() {
                 Start a fundraiser <ArrowUpRight size={15} />
               </Link>
               <UserButton afterSignOutUrl="/" />
-            </SignedIn>
+            </Show>
           </Suspense>
         </div>
 
@@ -66,14 +65,14 @@ export function Header() {
             <Link href="/#how-it-works">How it works</Link>
             <Link href="/#safety">Trust & safety</Link>
             <Suspense fallback={null}>
-              <SignedOut>
+              <Show when="signed-out">
                 <Link href="/sign-in">Log in</Link>
                 <Link href="/sign-up">Create account</Link>
-              </SignedOut>
-              <SignedIn>
+              </Show>
+              <Show when="signed-in">
                 <Link href="/dashboard">Dashboard</Link>
                 <Link href="/create">Start a fundraiser</Link>
-              </SignedIn>
+              </Show>
             </Suspense>
           </div>
         </details>
