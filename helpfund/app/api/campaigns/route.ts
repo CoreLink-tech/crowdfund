@@ -6,6 +6,7 @@ import {
   listPublicCampaigns,
 } from "@/lib/services/campaigns";
 import { ensureUserFromClerk } from "@/lib/services/users";
+import { rateLimit, clientKey } from "@/lib/security/rate-limit";
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,6 +45,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = rateLimit(clientKey(request, "create-campaign"), 10, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json({ error: "Too many requests. Try again shortly." }, { status: 429 });
+    }
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Sign in required" }, { status: 401 });

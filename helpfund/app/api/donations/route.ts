@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { createDonation } from "@/lib/services/donations";
+import { rateLimit, clientKey } from "@/lib/security/rate-limit";
 
 const schema = z.object({
   campaignId: z.string().min(1),
@@ -14,6 +15,10 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = rateLimit(clientKey(request, "donate"), 20, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json({ error: "Too many requests. Try again shortly." }, { status: 429 });
+    }
     const { userId } = await auth(); // optional — guests can donate
     const body = await request.json();
     const parsed = schema.safeParse(body);
