@@ -4,17 +4,76 @@ import { db } from "@/lib/db";
 import { donations, paymentTransactions, campaigns } from "@/lib/db/schema";
 import { recalculateCampaignTotals } from "./campaigns";
 
-export type PaymentProvider = "test" | "paystack" | "flutterwave";
+export type PaymentProvider = "test" | "paystack";
 
-/**
- * Payment provider abstraction.
- * Only the "test" adapter is active. Live providers are placeholders.
- */
 export interface PaymentInitResult {
   provider: PaymentProvider;
   providerReference: string;
   checkoutUrl?: string;
   status: "initiated" | "pending";
+}
+
+function activeProvider(): PaymentProvider {
+  if (process.env.PAYSTACK_SECRET_KEY) return "paystack";
+  return "test";
+}
+
+async function initiatePaystack(params: {
+  amountKobo: number;
+  email: string;
+  donationId: string;
+  callbackUrl?: string;
+}): Promise<PaymentInitResult> {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) throw new Error("Paystack is not configured");
+
+  const ref = `hf_${params.donationId.replace(/-/g, "").slice(0, 20)}_${Date.now()}`;
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+
+  const res = await fetch("https://api.paystack.co/transaction/initialize", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${secret}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email: params.email,
+      amount: params.amountKobo,
+      currency: "NGN",
+      reference: ref,
+      callback_url:
+        params.callbackUrl ||
+        (appUrl ? `${appUrl}/api/donations/paystack/callback` : undefined),
+      metadata: {
+        donation_id: params.donationId,
+        platform: "helpfund",
+      },
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data?.status) {
+    throw new Error(data?.message || "Unable to start Paystack payment");
+  }
+
+  return {
+    provider: "paystack",
+    providerReference: ref,
+    checkoutUrl: data.data.authorization_url,
+    status: "pending",
+  };
+}
+
+async function initiateTest(params: {
+  donationId: string;
+}): Promise<PaymentInitResult> {
+  const ref = `test_${params.donationId}_${Date.now()}`;
+  return {
+    provider: "test",
+    providerReference: ref,
+    status: "initiated",
+    checkoutUrl: `/api/donations/test-confirm?ref=${encodeURIComponent(ref)}`,
+  };
 }
 
 export async function initiatePayment(params: {
@@ -24,22 +83,17 @@ export async function initiatePayment(params: {
   email: string;
   provider?: PaymentProvider;
 }): Promise<PaymentInitResult> {
-  const provider = params.provider || "test";
+  const provider = params.provider || activeProvider();
 
-  if (provider === "test") {
-    // Clearly labeled test adapter — never treat as real money
-    const ref = `test_${params.donationId}_${Date.now()}`;
-    return {
-      provider: "test",
-      providerReference: ref,
-      status: "initiated",
-      // In a real UI we would redirect; for test we confirm via API
-      checkoutUrl: `/api/donations/test-confirm?ref=${ref}`,
-    };
+  if (provider === "paystack") {
+    return initiatePaystack({
+      amountKobo: params.amountKobo,
+      email: params.email,
+      donationId: params.donationId,
+    });
   }
 
-  // Placeholders for future providers — do not activate without credentials
-  throw new Error(`Payment provider "${provider}" is not configured.`);
+  return initiateTest({ donationId: params.donationId });
 }
 
 export async function createDonation(input: {
@@ -59,7 +113,6 @@ export async function createDonation(input: {
     throw new Error("Amount exceeds allowed limit");
   }
 
-  // Campaign must be publicly fundable
   const camp = await db
     .select({ id: campaigns.id, status: campaigns.status })
     .from(campaigns)
@@ -91,7 +144,7 @@ export async function createDonation(input: {
     currency: "NGN",
     donationId,
     email: input.donorEmail,
-    provider: input.provider || "test",
+    provider: input.provider || activeProvider(),
   });
 
   await db.insert(paymentTransactions).values({
@@ -101,7 +154,7 @@ export async function createDonation(input: {
     providerReference: payment.providerReference,
     amount: amountKobo,
     currency: "NGN",
-    status: "initiated",
+    status: payment.status === "pending" ? "pending" : "initiated",
   });
 
   await db
@@ -117,18 +170,12 @@ export async function createDonation(input: {
     providerReference: payment.providerReference,
     checkoutUrl: payment.checkoutUrl,
     amountNaira: input.amountNaira,
+    provider: payment.provider,
   };
 }
 
-/**
- * Confirm a test payment. Idempotent.
- * Real providers would call this from a verified webhook.
- */
-export async function confirmTestPayment(providerReference: string) {
-  if (!providerReference.startsWith("test_")) {
-    throw new Error("Invalid test reference");
-  }
-
+/** Mark donation successful (idempotent). Used by test confirm + Paystack verify. */
+export async function markDonationSuccessful(providerReference: string) {
   const tx = await db
     .select()
     .from(paymentTransactions)
@@ -137,7 +184,6 @@ export async function confirmTestPayment(providerReference: string) {
 
   if (!tx[0]) throw new Error("Transaction not found");
   if (tx[0].status === "successful") {
-    // Already processed — idempotent
     return { donationId: tx[0].donationId, alreadyProcessed: true };
   }
 
@@ -162,6 +208,34 @@ export async function confirmTestPayment(providerReference: string) {
   }
 
   return { donationId: tx[0].donationId, alreadyProcessed: false };
+}
+
+export async function confirmTestPayment(providerReference: string) {
+  if (!providerReference.startsWith("test_")) {
+    throw new Error("Invalid test reference");
+  }
+  return markDonationSuccessful(providerReference);
+}
+
+export async function verifyPaystackPayment(reference: string) {
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) throw new Error("Paystack is not configured");
+
+  const res = await fetch(
+    `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+    { headers: { Authorization: `Bearer ${secret}` } }
+  );
+  const data = await res.json();
+  if (!res.ok || !data?.status) {
+    throw new Error(data?.message || "Verification failed");
+  }
+
+  const status = data.data?.status;
+  if (status !== "success") {
+    throw new Error(`Payment not successful (${status})`);
+  }
+
+  return markDonationSuccessful(reference);
 }
 
 export async function getDonation(donationId: string) {

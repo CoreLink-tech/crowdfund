@@ -17,9 +17,12 @@ export async function POST(request: NextRequest) {
   try {
     const rl = rateLimit(clientKey(request, "donate"), 20, 60_000);
     if (!rl.ok) {
-      return NextResponse.json({ error: "Too many requests. Try again shortly." }, { status: 429 });
+      return NextResponse.json(
+        { error: "Too many requests. Try again shortly." },
+        { status: 429 }
+      );
     }
-    const { userId } = await auth(); // optional — guests can donate
+    const { userId } = await auth();
     const body = await request.json();
     const parsed = schema.safeParse(body);
 
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
       amountNaira: parsed.data.amount,
       isAnonymous: parsed.data.isAnonymous,
       message: parsed.data.message,
-      provider: "test",
+      // provider auto: Paystack if PAYSTACK_SECRET_KEY is set, else test
     });
 
     return NextResponse.json({
@@ -47,7 +50,11 @@ export async function POST(request: NextRequest) {
       providerReference: result.providerReference,
       checkoutUrl: result.checkoutUrl,
       amount: result.amountNaira,
-      note: "Test payment only — no real money is processed.",
+      provider: result.provider,
+      note:
+        result.provider === "test"
+          ? "Test payment only — no real money is processed."
+          : "Redirecting to secure checkout.",
     });
   } catch (err) {
     const message =

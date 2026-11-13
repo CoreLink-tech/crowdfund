@@ -1,19 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Heart, Loader2 } from "lucide-react";
+import { Heart, Loader2, ShieldCheck } from "lucide-react";
 import { formatNaira } from "@/lib/campaigns";
 
-const SUGGESTED = [1000, 2000, 5000, 10000];
+const SUGGESTED = [1000, 2000, 5000, 10000, 25000];
 
 export function DonateForm({
   campaignId,
-  campaignTitle,
 }: {
   campaignId: string;
-  campaignTitle: string;
+  campaignTitle?: string;
 }) {
   const [amount, setAmount] = useState(2000);
+  const [custom, setCustom] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -21,9 +21,11 @@ export function DonateForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{
-    donationId: string;
-    checkoutUrl?: string;
+    amount: number;
+    provider: string;
   } | null>(null);
+
+  const effectiveAmount = custom ? Number(custom) : amount;
 
   async function handleDonate(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +38,7 @@ export function DonateForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignId,
-          amount,
+          amount: effectiveAmount,
           donorName: name,
           donorEmail: email,
           message,
@@ -50,7 +52,13 @@ export function DonateForm({
         return;
       }
 
-      // Test adapter: confirm immediately
+      // Paystack: redirect to checkout
+      if (data.provider === "paystack" && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // Test adapter: confirm in place
       if (data.checkoutUrl) {
         const confirm = await fetch(data.checkoutUrl);
         const confirmData = await confirm.json();
@@ -61,7 +69,7 @@ export function DonateForm({
         }
       }
 
-      setSuccess({ donationId: data.donationId, checkoutUrl: data.checkoutUrl });
+      setSuccess({ amount: effectiveAmount, provider: data.provider || "test" });
       setLoading(false);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -71,14 +79,31 @@ export function DonateForm({
 
   if (success) {
     return (
-      <div style={{ textAlign: "center", padding: "8px 0" }}>
-        <p style={{ fontWeight: 700, marginBottom: 8 }}>Thank you!</p>
+      <div style={{ textAlign: "center", padding: "12px 0" }}>
+        <div
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: "50%",
+            background: "var(--green-soft)",
+            display: "grid",
+            placeItems: "center",
+            margin: "0 auto 12px",
+          }}
+        >
+          <Heart size={22} color="var(--green)" />
+        </div>
+        <p style={{ fontWeight: 700, marginBottom: 6 }}>Thank you!</p>
         <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 12 }}>
-          Your test donation of {formatNaira(amount)} was recorded.
-          <br />
-          <span style={{ fontSize: 12 }}>
-            (Test mode — no real money was charged)
-          </span>
+          {formatNaira(success.amount)} recorded successfully.
+          {success.provider === "test" && (
+            <>
+              <br />
+              <span style={{ fontSize: 12 }}>
+                Test mode — no real money was charged.
+              </span>
+            </>
+          )}
         </p>
         <button
           className="button button-outline button-full"
@@ -99,9 +124,12 @@ export function DonateForm({
             key={v}
             type="button"
             className={`button button-small ${
-              amount === v ? "button-green" : "button-outline"
+              !custom && amount === v ? "button-green" : "button-outline"
             }`}
-            onClick={() => setAmount(v)}
+            onClick={() => {
+              setAmount(v);
+              setCustom("");
+            }}
           >
             {formatNaira(v)}
           </button>
@@ -112,9 +140,9 @@ export function DonateForm({
         <input
           type="number"
           min={100}
-          value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
-          required
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder="Enter amount"
         />
       </label>
       <label className="field-label">
@@ -175,7 +203,7 @@ export function DonateForm({
       <button
         className="button button-green button-full"
         type="submit"
-        disabled={loading}
+        disabled={loading || !effectiveAmount || effectiveAmount < 100}
       >
         {loading ? (
           <>
@@ -183,13 +211,14 @@ export function DonateForm({
           </>
         ) : (
           <>
-            Donate {formatNaira(amount)} <Heart size={17} />
+            Donate {formatNaira(effectiveAmount || 0)} <Heart size={17} />
           </>
         )}
       </button>
-      <p style={{ fontSize: 11, color: "var(--muted)", margin: 0 }}>
-        Test payment only. No real money is processed yet.
-      </p>
+      <div className="trust-chip">
+        <ShieldCheck size={14} />
+        Secure checkout · Only verified payments count
+      </div>
     </form>
   );
 }
