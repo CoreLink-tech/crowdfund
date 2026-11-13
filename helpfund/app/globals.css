@@ -307,3 +307,7 @@ button { cursor: pointer; }
   .create-form { padding: 21px 17px; }
   .auth-card { padding: 27px 22px; }
 }
+
+.animate-spin { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+

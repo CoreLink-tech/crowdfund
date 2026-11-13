@@ -1,13 +1,25 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { ArrowUpRight, Heart, Menu } from "lucide-react";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignUpButton,
+  UserButton,
+} from "@clerk/nextjs";
 
 export function Header() {
   return (
     <header className="site-header">
       <div className="container header-inner">
         <Link href="/" className="brand" aria-label="HelpFund home">
-          <span className="brand-mark"><Heart size={18} strokeWidth={2.7} /></span>
-          <span>helpfund<span className="brand-period">.</span></span>
+          <span className="brand-mark">
+            <Heart size={18} strokeWidth={2.7} />
+          </span>
+          <span>
+            helpfund<span className="brand-period">.</span>
+          </span>
         </Link>
 
         <nav className="desktop-nav" aria-label="Main navigation">
@@ -17,17 +29,52 @@ export function Header() {
         </nav>
 
         <div className="header-actions">
-          <Link href="/sign-in" className="header-signin">Log in</Link>
-          <Link href="/create" className="button button-dark button-small">Start a fundraiser <ArrowUpRight size={15} /></Link>
+          <Suspense fallback={<div style={{ width: 120 }} />}>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="header-signin" type="button">
+                  Log in
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="button button-dark button-small" type="button">
+                  Start a fundraiser <ArrowUpRight size={15} />
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              <Link href="/dashboard" className="header-signin">
+                Dashboard
+              </Link>
+              <Link
+                href="/create"
+                className="button button-dark button-small"
+              >
+                Start a fundraiser <ArrowUpRight size={15} />
+              </Link>
+              <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+          </Suspense>
         </div>
+
         <details className="mobile-nav">
-          <summary className="mobile-menu" aria-label="Open menu"><Menu size={23} /></summary>
+          <summary className="mobile-menu" aria-label="Open menu">
+            <Menu size={23} />
+          </summary>
           <div className="mobile-nav-panel">
             <Link href="/explore">Explore fundraisers</Link>
             <Link href="/#how-it-works">How it works</Link>
             <Link href="/#safety">Trust & safety</Link>
-            <Link href="/sign-in">Log in</Link>
-            <Link href="/create">Start a fundraiser</Link>
+            <Suspense fallback={null}>
+              <SignedOut>
+                <Link href="/sign-in">Log in</Link>
+                <Link href="/sign-up">Create account</Link>
+              </SignedOut>
+              <SignedIn>
+                <Link href="/dashboard">Dashboard</Link>
+                <Link href="/create">Start a fundraiser</Link>
+              </SignedIn>
+            </Suspense>
           </div>
         </details>
       </div>
