@@ -28,8 +28,8 @@ async function requireAdmin() {
   const admin = await isAdmin(userId);
   // Allow bootstrap via env ADMIN_CLERK_IDS (comma-separated)
   const bootstrapIds = (process.env.ADMIN_CLERK_IDS || "")
-    .split(",")
-    .map((s) => s.trim())
+    .split(/[,\s]+/)
+    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
     .filter(Boolean);
   if (!admin && !bootstrapIds.includes(userId)) {
     return null;
